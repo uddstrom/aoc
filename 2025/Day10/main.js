@@ -1,5 +1,5 @@
 import { getData, getPath, matrix, min, sum } from '../lib/utils.js';
-import { solve, augment } from '../lib/linAlg.js';
+import { solve } from './linearAlegbraStuff.js';
 
 var PUZZLE_INPUT_PATH = `${getPath(import.meta.url)}/${process.argv[2] ?? 'puzzle_input'}`;
 
@@ -43,32 +43,13 @@ function p1({ indicators: goal, buttons }) {
 function p2({ joltages, buttons }) {
     var rows = joltages.length;
     var cols = buttons.length;
-
     var A = matrix(rows, cols, 0);
 
     buttons.forEach((btn, i) => btn.forEach((j) => A[j][i] = 1));
-    // console.table(A);
-
-    // var A = [
-    //     [0, 0, 0, 0, 1, 1],
-    //     [0, 1, 0, 0, 0, 1],
-    //     [0, 0, 1, 1, 1, 0],
-    //     [1, 1, 0, 1, 0, 0],
-    // ]
-    // var b = [3, 5, 4, 7];
-
-    // console.log('Solving');
-    // console.table(A, joltages);
 
     var solutions = solve(A, joltages);
-    if (solutions.length === 0) {
-        console.log('No Solutions', solutions);
-        console.table(augment(A, joltages));
-    }
 
-    var minimum = min(solutions.map(sum));
-
-    return minimum;
+    return min(solutions.map(sum));
 }
 
 var data = getData(PUZZLE_INPUT_PATH)(parser);

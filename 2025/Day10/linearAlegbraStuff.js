@@ -1,16 +1,28 @@
-import { column, index, matrix, min, multiply, range, setCartesian, size, subset, subtract } from 'mathjs';
-import { rng } from './utils.js';
+import { column, index, matrix, min, multiply, range, size, subset, subtract } from 'mathjs';
+import { rng } from '../lib/utils.js';
 
-function constraint(x, A, b) {
-    var col = column(matrix(A), x)._data.flat();
-    var vals = col.map((v, i) => v === 0 ? Number.MAX_SAFE_INTEGER : b[i]);
-    var max = min(...vals) + 1;
-    return rng(max).map(i => ({ x, i }));
+// Solves Ax = b
+export function solve(A, b) {
+    var [U, nonPivots, bb] = rref(A, b);
+    var freeVariableConstraints = nonPivots.map(x => constraint(x, A, b));
+    var combinations = combine(...freeVariableConstraints)
+
+    var solutions = combinations.map((combo) => {
+        var freeVarsMap = new Map(combo.map(({ x, i }) => [x, i]));
+        return backSubstitute(U, bb, freeVarsMap)
+    });
+
+    return solutions.filter(sln => sln.every(v => {
+        // WTF!? JavaScript and numbers...
+        return Math.abs(Math.round(v) - v) < 0.00001 && v >= -0.00001;
+    }));
 }
 
-export function rref(A, b) {
+// Calculates reduced row echelon form for a matrix A
+// augmented with output vector b.
+function rref(A, b) {
 
-    var M = b ? augment(A, b) : structuredClone(A);
+    var M = augment(A, b);
 
     var rows = A.length;
     var cols = b ? A[0].length : M[0].length;
@@ -21,7 +33,7 @@ export function rref(A, b) {
     // 1. iterate over colums starting from left
     for (let c = 0; c < cols; c++) {
 
-        // 2a. select pivot row
+        // 2. select pivot row
         let pivot_row_idx = -1;
         for (let r = current_row_idx; r < rows; r++) {
             if (M[r][c] !== 0) {
@@ -34,29 +46,23 @@ export function rref(A, b) {
             continue;
         }
 
-        // 2b. swap pivot row and current row
+        // 3. swap pivot row and current row
         if (current_row_idx !== pivot_row_idx) {
             [M[current_row_idx], M[pivot_row_idx]] = [M[pivot_row_idx], M[current_row_idx]];
         }
 
-        // 3. Scale pivot row with pivot value.
+        // 4. scale pivot row with pivot value.
         let pivot_value = M[current_row_idx][c];
-        M[current_row_idx] = M[current_row_idx].map((val) => {
-            var scaledVal = val / pivot_value;
-            // console.log('scaling...', val, pivot_value, scaledVal);
-            return scaledVal;
-        });
+        M[current_row_idx] = M[current_row_idx].map((val) => val / pivot_value);
 
-        // 4. Eliminate values below and above pivot.
+        // 5. eliminate values below and above pivot.
         for (let r = 0; r < rows; r++) {
-            if (r === current_row_idx) {
-                continue;
-            }
+            if (r === current_row_idx) continue;
             let lead_coefficient = M[r][c];
             M[r] = subtract(M[r], multiply(M[current_row_idx], lead_coefficient));
         }
 
-        // 5. move to next column.
+        // 6. move to next column.
         current_row_idx++;
     }
 
@@ -69,16 +75,22 @@ export function rref(A, b) {
         : [M, non_pivot_columns];
 }
 
-export function augment(A, x) {
+function constraint(x, A, b) {
+    var col = column(matrix(A), x)._data.flat();
+    var vals = col.map((v, i) => v === 0 ? Number.MAX_SAFE_INTEGER : b[i]);
+    var max = min(...vals) + 1;
+    return rng(max).map(i => ({ x, i }));
+}
+
+function augment(A, x) {
     var [r, _] = size(matrix(A));
     var [rr, _] = size(matrix(x));
     if (r !== rr) throw new Error('sizes dont match');
     return A.map((row, i) => [...row, x[i]]);
 }
 
-// freeVars = map with key = variable index and value = variable value 
 function backSubstitute(U, b, freeVars) {
-    // console.log('backtracking', U, b, freeVars);
+    // freeVars = map with key = variable index and value = variable value 
     var U_reversed = U.toReversed();
     var b_reversed = b.toReversed();
     var n = U[0].length; // number of variables
@@ -93,41 +105,8 @@ function backSubstitute(U, b, freeVars) {
             solution[var_index] = ans;
         }
     });
-    // console.log('backsub solution', solution);
+
     return solution;
-}
-
-export function solve(A, b) {
-
-    // console.log('Solving');
-    // console.table(augment(A, b));
-
-    var [U, nonPivots, bb] = rref(A, b);
-
-    // console.table(augment(U, bb));
-    // console.log(nonPivots);
-
-    var freeVariableConstraints = nonPivots.map(x => constraint(x, A, b));
-
-    // console.log(freeVariableConstraints);
-
-    // if (freeVariableConstraints.length > 2) throw new Error("Too many free variables");
-
-    var combinations = combine(...freeVariableConstraints)
-    // console.log('combinations', combinations);
-    var solutions = combinations.map((combo) => {
-        var map = new Map(combo.map(({ x, i }) => [x, i]));
-        // console.log(map);
-        return backSubstitute(U, bb, map)
-    });
-
-    // console.log('Solutions', solutions);
-    return solutions.filter(sln => sln.every(v => {
-        // console.log(v);
-        // return Number.isInteger(v) && v >= 0;
-        return Math.abs(Math.round(v) - v) < 0.00001 && v >= -0.00001;
-        //return v >= 0;
-    }));
 }
 
 function combine(a, b, ...rest) {
